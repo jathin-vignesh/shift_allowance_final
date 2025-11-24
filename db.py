@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")   # FIXED (no trailing space)
+DATABASE_URL = os.getenv("DB_URL")   # FIXED (no trailing space)
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL not found! Check your .env file.")
