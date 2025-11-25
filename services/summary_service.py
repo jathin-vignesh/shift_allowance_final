@@ -2,13 +2,26 @@ from sqlalchemy.orm import Session
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from sqlalchemy import extract
 from decimal import Decimal
-
-
+from fastapi import HTTPException
+import re
+ 
+ 
 def get_client_shift_summary(db: Session, payroll_month: str):
     """Fetch shift summary filtered by payroll_month (YYYY-MM) including total allowances."""
-
+ 
+    if " " in payroll_month:
+        raise HTTPException(
+            status_code=400,
+            detail="Spaces are not allowed in payroll_month. Use format YYYY-MM"
+        )
+ 
+    if not re.match(r"^\d{4}-\d{2}$", payroll_month):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid payroll_month format. Expected YYYY-MM"
+        )
     year, month = payroll_month.split("-")
-
+ 
     records = (
         db.query(ShiftAllowances)
         .filter(
@@ -17,15 +30,15 @@ def get_client_shift_summary(db: Session, payroll_month: str):
         )
         .all()
     )
-
+ 
     if not records:
         return []
-
+ 
     summary = {}
-
+ 
     for row in records:
         client = row.client or "Unknown"
-
+ 
         if client not in summary:
             summary[client] = {
                 "employees": set(),
@@ -35,14 +48,13 @@ def get_client_shift_summary(db: Session, payroll_month: str):
                 "prime": Decimal(0),
                 "total_allowances": Decimal(0)
             }
-
+ 
         summary[client]["employees"].add(row.emp_id)
-
+ 
         for mapping in row.shift_mappings:
             shift_type = mapping.shift_type.strip().upper()
             days = Decimal(mapping.days or 0)
-
-            # add days
+ 
             if shift_type == "A":
                 summary[client]["shift_a"] += days
             elif shift_type == "B":
@@ -51,18 +63,17 @@ def get_client_shift_summary(db: Session, payroll_month: str):
                 summary[client]["shift_c"] += days
             elif shift_type == "PRIME":
                 summary[client]["prime"] += days
-
-            # fetch rate for year
+ 
             rate = (
                 db.query(ShiftsAmount.amount)
                 .filter(ShiftsAmount.shift_type == shift_type)
                 .filter(ShiftsAmount.payroll_year == year)
                 .scalar()
             ) or 0
-
+ 
             rate = Decimal(str(rate))
             summary[client]["total_allowances"] += days * rate
-
+ 
     result = [
         {
             "client": client,
@@ -75,5 +86,5 @@ def get_client_shift_summary(db: Session, payroll_month: str):
         }
         for client, info in summary.items()
     ]
-
+ 
     return result
