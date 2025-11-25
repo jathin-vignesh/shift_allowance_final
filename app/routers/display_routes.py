@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query,Body
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session,joinedload
 from db import get_db
 from models.models import ShiftAllowances,ShiftMapping
 from utils.dependencies import get_current_user
-from schemas.displayschema import PaginatedShiftResponse,EmployeeResponse,PartialUpdateShiftRequest,PartialUpdateShiftResponse
-from services.display_service import partial_update_shift
+from schemas.displayschema import PaginatedShiftResponse,EmployeeResponse,ShiftUpdateRequest,ShiftUpdateResponse
+from services.display_service import update_shift_service
 from sqlalchemy import func
 
 router = APIRouter(prefix="/display")
@@ -59,29 +59,18 @@ def get_detail_page(id:int,
         raise HTTPException(status_code=404,detail="Given id doesn't exist")
     return data
 
-@router.patch(
-    "/shift/partial-update/{id}",
-    response_model=PartialUpdateShiftResponse
-)
-def partial_update_shift_route(
-    id: int,
-    updates: PartialUpdateShiftRequest = Body(...),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    update_data = updates.model_dump(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No updates provided")
- 
-    updated_record = partial_update_shift(db=db, record_id=id, updates=update_data)
- 
+
+@router.put("/update/{record_id}", response_model=ShiftUpdateResponse)
+def update_detail_data(record_id: int, req: ShiftUpdateRequest, db: Session = Depends(get_db)):
+    updates = req.dict()  # Convert Pydantic model to dict
+    
+    result = update_shift_service(db, record_id, updates)
+    
     return {
-        "message": f"Record ID {id} updated successfully",
-        "updated_fields": list(update_data.keys()),
-        "shift_a_days": updated_record.shift_a_days,
-        "shift_b_days": updated_record.shift_b_days,
-        "shift_c_days": updated_record.shift_c_days,
-        "prime_days": updated_record.prime_days,
-        "total_days": updated_record.total_days,
-        "total_days_allowance": getattr(updated_record, "total_days_allowance", 0),
+        "message": "Shift updated successfully",
+        "updated_fields": [k for k, v in updates.items() if v > 0],
+        "total_days": result["total_days"],
+        "total_allowance": result["total_allowance"],
+        "shift_details": result["shift_details"]
     }
+

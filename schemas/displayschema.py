@@ -16,6 +16,18 @@ class ShiftAllowancesResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ClientSummary(BaseModel):
+    client: str
+    total_employees: int
+    shift_a_days: int
+    shift_b_days: int
+    shift_c_days: int
+    prime_days: int
+    total_allowances: float  
+
+    class Config:
+        from_attributes = True
+
 
 class ShiftMappingResponse(BaseModel):
     shift_type: str
@@ -62,26 +74,24 @@ class PaginatedShiftResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class PartialUpdateShiftRequest(BaseModel):
-    shift_a_days: Optional[int] = None
-    shift_b_days: Optional[int] = None
-    shift_c_days: Optional[int] = None
-    prime_days: Optional[int] = None
- 
-    class Config:
-        from_attributes = True
-       
- 
- 
-class PartialUpdateShiftResponse(BaseModel):
+# Request Model - what user sends to update shifts
+class ShiftUpdateRequest(BaseModel):
+    shift_a: int = 0
+    shift_b: int = 0
+    shift_c: int = 0
+    prime: int = 0
+
+
+# For showing shift details in response
+class ShiftDetail(BaseModel):
+    shift: str
+    days: int
+
+
+# Final response after update
+class ShiftUpdateResponse(BaseModel):
     message: str
     updated_fields: List[str]
-    shift_a_days: Optional[int]
-    shift_b_days: Optional[int]
-    shift_c_days: Optional[int]
-    prime_days: Optional[int]
-    total_days: Optional[int]
-    total_days_allowance: Optional[float]
- 
-    class Config:
-        from_attributes = True
+    total_days: int
+    total_allowance: float
+    shift_details: List[ShiftDetail]
