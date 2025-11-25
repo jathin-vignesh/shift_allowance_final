@@ -1,89 +1,63 @@
 import pandas as pd
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
-from fastapi import HTTPException
 
 
 def export_filtered_excel(db: Session, emp_id: str | None, account_manager: str | None):
 
-    
+    # Base query → GROUP BY emp_id to keep EMPLOYEE UNIQUE
     query = (
         db.query(
             ShiftAllowances.emp_id,
-            ShiftAllowances.emp_name,
-            ShiftAllowances.grade,
-            ShiftAllowances.department,
-            ShiftAllowances.client,
-            ShiftAllowances.project,
-            ShiftAllowances.project_code,
-            ShiftAllowances.account_manager,
+            func.min(ShiftAllowances.emp_name).label("emp_name"),
+            func.min(ShiftAllowances.grade).label("grade"),
+            func.min(ShiftAllowances.department).label("department"),
+            func.min(ShiftAllowances.client).label("client"),
+            func.min(ShiftAllowances.project).label("project"),
+            func.min(ShiftAllowances.project_code).label("project_code"),
+            func.min(ShiftAllowances.account_manager).label("account_manager"),
             func.array_agg(ShiftMapping.shift_type).label("shift_type"),
-            ShiftAllowances.delivery_manager,
-            ShiftAllowances.practice_lead,
-            ShiftAllowances.billability_status,
-            ShiftAllowances.practice_remarks,
-            ShiftAllowances.rmg_comments,
-            ShiftAllowances.duration_month,
-            ShiftAllowances.payroll_month
+            func.min(ShiftAllowances.duration_month).label("duration_month"),
+            func.min(ShiftAllowances.payroll_month).label("payroll_month")
         )
         .outerjoin(ShiftMapping, ShiftAllowances.id == ShiftMapping.shiftallowance_id)
-        .group_by(ShiftAllowances.id)
+        .group_by(ShiftAllowances.emp_id)
     )
 
-    # Case 1: No filters → full data
-    if not emp_id and not account_manager:
-        rows = query.all()
+    # Apply filters
+    if emp_id:
+        query = query.filter(ShiftAllowances.emp_id == emp_id)
 
-    else:
-        # Apply filters
-        if emp_id:
-            query = query.filter(ShiftAllowances.emp_id == emp_id)
-        if account_manager:
-            query = query.filter(ShiftAllowances.account_manager == account_manager)
+    if account_manager:
+        query = query.filter(ShiftAllowances.account_manager == account_manager)
 
-        rows = query.all()
+    rows = query.all()
 
-        # Case 2: Filter applied but no results → return FULL data again
-        if not rows:
-            rows = query.all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="Entered emp_id or account_manager is not found")
 
-        # Case 3: STILL empty → raise HTTP
-        if not rows:
-            raise HTTPException(
-                status_code=404,
-                detail="No data found for the given emp_id or account_manager"
-            )
-
+    # Load shift amounts
     shift_amounts = db.query(ShiftsAmount).all()
-
-    # If table empty → STOP and throw HTTP error
     if not shift_amounts:
-        raise HTTPException(
-            status_code=404,
-            detail="Shift Allowance Amount master table (shifts_amount) is empty. Please configure shift amounts."
-        )
+        raise HTTPException(status_code=404, detail="Shift amount table is empty")
 
-    # Convert to dict → {"A": 500, "B": 350, ...}
-    ALLOWANCE_MAP = {
-        item.shift_type.upper(): float(item.amount)
-        for item in shift_amounts
-    }
+    # Convert amounts to dictionary → {'A': 500, 'B':350, ...}
+    AMOUNT_MAP = {s.shift_type.upper(): float(s.amount) for s in shift_amounts}
 
-    final_data = []
+    # FINAL RESULT LIST
+    final = []
 
-    for row in rows:
+    for r in rows:
+        shifts = r.shift_type or []
+        shifts = [s.upper() for s in shifts]
 
-        shift_list = row.shift_type if row.shift_type else []
-        shift_list = [s.upper() for s in shift_list]
+        total_allowances = sum(AMOUNT_MAP.get(s, 0) for s in shifts)
 
-        # Calculate TOTAL ALLOWANCES from DB values
-        total_allowances = sum(ALLOWANCE_MAP.get(s, 0) for s in shift_list)
+        row_dict = r._asdict()
+        row_dict["total_allowances"] = total_allowances
 
-        row_data = row._asdict()
-        row_data["total_allowances"] = total_allowances
+        final.append(row_dict)
 
-        final_data.append(row_data)
-
-    # Return DataFrame to FastAPI route
-    return pd.DataFrame(final_data)
+    return pd.DataFrame(final)
