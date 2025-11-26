@@ -22,10 +22,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # USER REGISTRATION
 def register_user(db: Session, user: UserCreate) -> UserResponse:
     existing_user = db.query(Users).filter(Users.email == user.email).first()
+    existing_username = db.query(Users).filter(Users.username == user.username).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
+        )
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered"
         )
 
     hashed_password = hash_password(user.password)
