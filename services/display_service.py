@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session,joinedload
 from sqlalchemy import extract
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from datetime import datetime
+from typing import Optional
 
 def parse_shift_value(value: str):
     """Convert input to float and validate shift value."""
@@ -18,104 +19,102 @@ def parse_shift_value(value: str):
         raise HTTPException(status_code=400, detail=f"Can't add more than 22 days per shift.")
     return num
  
-def update_shift_service(db: Session, emp_id: str, payroll_month: str, updates: dict):
-    """
-    Update shift days for a given employee and payroll month.
-    """
+def update_shift_service(
+    db: Session,
+    emp_id: str,
+    payroll_month: str,
+    updates: dict,
+    duration_month: Optional[str] = None
+):
+    """Update shift days for a given employee, payroll month, and optional duration month."""
+ 
     allowed_fields = ["shift_a", "shift_b", "shift_c", "prime"]
     extra_fields = [k for k in updates if k not in allowed_fields]
     if extra_fields:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid fields: {extra_fields}. Only {allowed_fields} allowed."
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid fields: {extra_fields}. Only {allowed_fields} allowed.")
  
-    # Convert raw strings to numeric values
     numeric_updates = {k: parse_shift_value(v) for k, v in updates.items()}
- 
-    # Map to DB shift types
     shift_map = {"shift_a": "A", "shift_b": "B", "shift_c": "C", "prime": "PRIME"}
     mapped_updates = {shift_map[k]: numeric_updates[k] for k in numeric_updates if numeric_updates[k] >= 0}
  
     if not mapped_updates:
         raise HTTPException(status_code=400, detail="No valid shift values provided.")
  
-    # Parse payroll_month YYYY-MM to date
+    # Parse payroll_month
     try:
         payroll_date = datetime.strptime(payroll_month, "%Y-%m")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payroll_month format. Use YYYY-MM")
  
-    # Get record by emp_id + payroll_month
-    record = (
-        db.query(ShiftAllowances)
-        .filter(
-            ShiftAllowances.emp_id == emp_id,
-            extract("year", ShiftAllowances.payroll_month) == payroll_date.year,
-            extract("month", ShiftAllowances.payroll_month) == payroll_date.month
-        )
-        .first()
+    # Parse duration_month if provided
+    duration_date = None
+    if duration_month:
+        try:
+            duration_date = datetime.strptime(duration_month, "%Y-%m")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid duration_month format. Use YYYY-MM")
+ 
+    # Get record filtered by emp_id + payroll_month + optional duration_month
+    query = db.query(ShiftAllowances).filter(
+        ShiftAllowances.emp_id == emp_id,
+        extract("year", ShiftAllowances.payroll_month) == payroll_date.year,
+        extract("month", ShiftAllowances.payroll_month) == payroll_date.month
     )
  
-    if not record:
-        raise HTTPException(status_code=404, detail=f"No shift record found for employee {emp_id} and month {payroll_month}")
+    if duration_date:
+        query = query.filter(
+            extract("year", ShiftAllowances.duration_month) == duration_date.year,
+            extract("month", ShiftAllowances.duration_month) == duration_date.month
+        )
  
-    # Get rates from DB
+    record = query.first()
+    if not record:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No shift record found for employee {emp_id}, month {payroll_month}, duration {duration_month}"
+        )
+ 
+    # Get shift rates
     rate_rows = db.query(ShiftsAmount).all()
     rates = {r.shift_type.upper(): float(r.amount) for r in rate_rows}
- 
     for stype in mapped_updates:
         if stype not in rates:
             raise HTTPException(status_code=400, detail=f"Missing rate for shift '{stype}'.")
  
     existing = {m.shift_type: m for m in record.shift_mappings}
  
-    # Apply updates temporarily for validation
+    # Apply updates
     for stype, days in mapped_updates.items():
         if stype in existing:
             existing[stype].days = days
         else:
-            temp = ShiftMapping(
-                shiftallowance_id=record.id,
-                shift_type=stype,
-                days=days
-            )
+            temp = ShiftMapping(shiftallowance_id=record.id, shift_type=stype, days=days)
             existing[stype] = temp
  
-    # Validate total days (<=22)
+    # Validate total days
     total_days_temp = float(sum(float(m.days) for m in existing.values()))
     if total_days_temp > 22:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Total days cannot exceed 22 in a month. Current total = {total_days_temp}"
-        )
+        raise HTTPException(status_code=400, detail=f"Total days cannot exceed 22 in a month. Current total = {total_days_temp}")
  
-    # Commit real updates
+    # Commit updates
     for stype, days in mapped_updates.items():
         if stype not in [m.shift_type for m in record.shift_mappings]:
             db.add(existing[stype])
- 
     db.commit()
     db.refresh(record)
  
     # Prepare response
-    shift_details = [
-        {"shift": m.shift_type, "days": float(m.days)}
-        for m in record.shift_mappings
-        if m.shift_type in mapped_updates
-    ]
- 
+    shift_details = [{"shift": m.shift_type, "days": float(m.days)} for m in record.shift_mappings if m.shift_type in mapped_updates]
     total_days = float(sum(float(m.days) for m in record.shift_mappings))
     total_allowance = float(sum(float(m.days) * rates[m.shift_type] for m in record.shift_mappings))
  
     return {
-        "emp_id": emp_id,
-        "payroll_month": payroll_month,
+        "message": "Shift updated successfully",
         "updated_fields": list(mapped_updates.keys()),
         "total_days": total_days,
         "total_allowance": total_allowance,
-        "shift_details": shift_details
+        "shift_details": shift_details,
     }
 
 def fetch_shift_record(emp_id: str, duration_month: str, payroll_month: str, db: Session):
