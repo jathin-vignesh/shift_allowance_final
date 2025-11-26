@@ -63,9 +63,10 @@ def update_shift_detail(
     req: ShiftUpdateRequest,
     emp_id: str,
     payroll_month: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
-    updates = req.model_dump()
+    updates = req.model_dump(exclude_unset=True)
     result = update_shift_service(db, emp_id=emp_id, payroll_month=payroll_month, updates=updates)
  
     return {
