@@ -20,3 +20,4 @@ class ExcelColumnMap(Enum):
     shift_b_days = "Shift B\n(04 PM to 01 AM)\nINR 350"
     shift_c_days = "Shift C\n(06 AM to 03 PM)\nINR 100"
     prime_days = "Prime\n(12 AM to 09 AM)\nINR 700"
+    total_days = "TOTAL DAYS"
