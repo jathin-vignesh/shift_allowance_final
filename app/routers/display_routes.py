@@ -4,8 +4,12 @@ from db import get_db
 from models.models import ShiftAllowances,ShiftMapping
 from utils.dependencies import get_current_user
 from schemas.displayschema import PaginatedShiftResponse,EmployeeResponse,ShiftUpdateRequest,ShiftUpdateResponse
-from services.display_service import update_shift_service,fetch_shift_record
+from services.display_service import update_shift_service,fetch_shift_record,generate_employee_shift_excel
 from sqlalchemy import func
+import pandas as pd
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+
 
 router = APIRouter(prefix="/display")
 
@@ -58,6 +62,17 @@ def get_employee_shift_details(
     current_user=Depends(get_current_user)
 ):
     return fetch_shift_record(emp_id, duration_month, payroll_month, db)
+
+@router.get("/details/download")
+def download_shift_details(
+    emp_id: str,
+    duration_month: str,
+    payroll_month: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    return generate_employee_shift_excel(emp_id, duration_month, payroll_month, db)
+
 
 
 

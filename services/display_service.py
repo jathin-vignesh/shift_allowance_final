@@ -4,6 +4,9 @@ from sqlalchemy import extract
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from datetime import datetime
 from typing import Optional
+import pandas as pd
+from io import BytesIO
+from fastapi.responses import StreamingResponse
 
 def parse_shift_value(value: str):
     """Convert input to float and validate shift value."""
@@ -174,3 +177,39 @@ def fetch_shift_record(emp_id: str, duration_month: str, payroll_month: str, db:
             result[stype] = float(m.days)
 
     return result
+
+def generate_employee_shift_excel(emp_id: str, duration_month: str, payroll_month: str, db: Session):
+    record = fetch_shift_record(emp_id, duration_month, payroll_month, db)
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    # Convert YYYY-MM to Feb'25 format
+    duration_fmt = datetime.strptime(record["duration_month"], "%Y-%m").strftime("%b'%y")
+    payroll_fmt = datetime.strptime(record["payroll_month"], "%Y-%m").strftime("%b'%y")
+
+    record["duration_month"] = duration_fmt
+    record["payroll_month"] = payroll_fmt
+
+    df = pd.DataFrame([record])
+
+    ordered_columns = [
+        "id","emp_id","emp_name","grade","department","client","project","project_code",
+        "account_manager","practice_lead","delivery_manager","duration_month","payroll_month",
+        "billability_status","practice_remarks","rmg_comments","created_at","updated_at",
+        "A","B","C","PRIME"
+    ]
+    df = df[ordered_columns]
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Shift Details")
+    output.seek(0)
+
+    filename = f"{emp_id}_{duration_month}_{payroll_month}_shift_details.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
