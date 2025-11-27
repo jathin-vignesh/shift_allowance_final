@@ -4,7 +4,7 @@ from db import get_db
 from models.models import ShiftAllowances,ShiftMapping
 from utils.dependencies import get_current_user
 from schemas.displayschema import PaginatedShiftResponse,EmployeeResponse,ShiftUpdateRequest,ShiftUpdateResponse
-from services.display_service import update_shift_service,display_emp_details
+from services.display_service import update_shift_service,display_emp_details,fetch_shift_data
 from sqlalchemy import func
 
 router = APIRouter(prefix="/display")
@@ -16,38 +16,15 @@ def get_all_data(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-    query = (
-        db.query(
-            ShiftAllowances.emp_id.label("emp_id"),
-            func.min(ShiftAllowances.id).label("id"),
-            func.min(ShiftAllowances.emp_name).label("emp_name"),
-            func.min(ShiftAllowances.department).label("department"),
-            func.min(ShiftAllowances.payroll_month).label("month"),
-            func.min(ShiftAllowances.client).label("client"),
-            func.min(ShiftAllowances.project_code).label("project_code"),
-            func.min(ShiftAllowances.account_manager).label("account_manager"),
-            func.array_agg(ShiftMapping.shift_type).label("shift_category")
-        )
-        .outerjoin(ShiftMapping, ShiftAllowances.id == ShiftMapping.shiftallowance_id)
-        .group_by(ShiftAllowances.emp_id)
-    )
- 
-    total_records = query.count()
- 
-    data = (
-        query.order_by(func.min(ShiftAllowances.id).asc())
-        .offset(start)
-        .limit(limit)
-        .all()
-    )
- 
-    if not data:
-        raise HTTPException(status_code=404, detail="No data found for given range")
+    selected_month, total_records, data, message = fetch_shift_data(db, start, limit)
  
     return {
+        "selected_month": selected_month,
+        "message": message,
         "total_records": total_records,
         "data": data
     }
+
 
 @router.get("/{emp_id}")
 def get_employee_shift_details(
