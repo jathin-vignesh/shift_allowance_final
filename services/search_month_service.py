@@ -26,7 +26,7 @@ def search_shift_by_month_range(
  
     # Check end month not greater than current
     if end_date and end_date > current_month_start:
-        raise HTTPException(status_code=400, detail="end_month cannot be greater than current month")
+        raise HTTPException(status_code=400, detail=f"end_month cannot be greater than {today.strftime('%Y-%m')}")
  
     # Convert start/end to first day of month
     if start_date:
@@ -44,23 +44,23 @@ def search_shift_by_month_range(
         ShiftAllowances.project,
         ShiftAllowances.project_code,
         ShiftAllowances.account_manager,
-        func.to_char(ShiftAllowances.duration_month, "YYYY-MM").label("duration_month"),
+        ShiftAllowances.duration_month,
         ShiftAllowances.payroll_month
     )
  
     # Apply month filters
     if start_date and end_date:
         query = query.filter(
-            func.date_trunc("month", ShiftAllowances.payroll_month) >= start_date,
-            func.date_trunc("month", ShiftAllowances.payroll_month) <= end_date
+            func.date_trunc("month", ShiftAllowances.duration_month) >= start_date,
+            func.date_trunc("month", ShiftAllowances.duration_month) <= end_date
         )
     elif start_date:
-        query = query.filter(func.date_trunc("month", ShiftAllowances.payroll_month) == start_date)
+        query = query.filter(func.date_trunc("month", ShiftAllowances.duration_month) == start_date)
     elif end_date:
-        query = query.filter(func.date_trunc("month", ShiftAllowances.payroll_month) == end_date)
+        query = query.filter(func.date_trunc("month", ShiftAllowances.duration_month) == end_date)
  
     # Execute query
-    rows = query.order_by(ShiftAllowances.payroll_month, ShiftAllowances.emp_id).all()
+    rows = query.order_by(ShiftAllowances.duration_month, ShiftAllowances.emp_id).all()
  
     if not rows:
         raise HTTPException(status_code=404, detail="No records found for given month range")
@@ -69,6 +69,7 @@ def search_shift_by_month_range(
     final_data = []
     for row in rows:
         r = row._asdict()
+        r["duration_month"] = row.duration_month.strftime("%Y-%m")
         r["payroll_month"] = row.payroll_month.strftime("%Y-%m")
         final_data.append(r)
  

@@ -15,7 +15,7 @@ def fetch_shift_data(db: Session, start: int, limit: int):
     # Check if current month records exist
     has_current_month = (
         db.query(ShiftAllowances)
-        .filter(func.to_char(ShiftAllowances.payroll_month, "YYYY-MM") == current_month)
+        .filter(func.to_char(ShiftAllowances.duration_month, "YYYY-MM") == current_month)
         .first()
     )
  
@@ -26,8 +26,8 @@ def fetch_shift_data(db: Session, start: int, limit: int):
     else:
         # Get latest available month from DB
         latest_month = (
-            db.query(func.to_char(ShiftAllowances.payroll_month, "YYYY-MM"))
-            .order_by(func.to_char(ShiftAllowances.payroll_month, "YYYY-MM").desc())
+            db.query(func.to_char(ShiftAllowances.duration_month, "YYYY-MM"))
+            .order_by(func.to_char(ShiftAllowances.duration_month, "YYYY-MM").desc())
             .first()
         )
  
@@ -50,7 +50,7 @@ def fetch_shift_data(db: Session, start: int, limit: int):
             ShiftAllowances.account_manager.label("account_manager"),
             func.to_char(ShiftAllowances.duration_month, "YYYY-MM").label("duration_month")
         )
-        .filter(func.to_char(ShiftAllowances.payroll_month, "YYYY-MM") == selected_month)
+        .filter(func.to_char(ShiftAllowances.duration_month, "YYYY-MM") == selected_month)
         .group_by(ShiftAllowances.id, ShiftAllowances.emp_id, ShiftAllowances.emp_name,
                   ShiftAllowances.department, ShiftAllowances.payroll_month,
                   ShiftAllowances.client, ShiftAllowances.project_code,
@@ -61,7 +61,6 @@ def fetch_shift_data(db: Session, start: int, limit: int):
     data = query.order_by(ShiftAllowances.id.asc()).offset(start).limit(limit).all()
  
     return selected_month, total_records, data, message
-
 def parse_shift_value(value: str):
     """Convert input to float and validate shift value."""
     if value is None or str(value).strip() == "":

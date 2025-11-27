@@ -4,7 +4,7 @@ from db import get_db
 from utils.dependencies import get_current_user
 from services.search_month_service import search_shift_by_month_range
  
-router = APIRouter(prefix="/monthly", tags=["Payroll Month Search"])
+router = APIRouter(prefix="/monthly")
  
 @router.get("/search")
 def get_search_by_monthly(

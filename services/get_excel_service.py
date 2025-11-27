@@ -74,18 +74,18 @@ def export_filtered_excel(
                 raise HTTPException(status_code=400, detail="start_month cannot be after end_month")
  
             query = query.filter(
-                func.date_trunc("month", ShiftAllowances.payroll_month) >= start_date,
-                func.date_trunc("month", ShiftAllowances.payroll_month) <= end_date,
+                func.date_trunc("month", ShiftAllowances.duration_month) >= start_date,
+                func.date_trunc("month", ShiftAllowances.duration_month) <= end_date,
             )
         else:
-            query = query.filter(func.date_trunc("month", ShiftAllowances.payroll_month) == start_date)
+            query = query.filter(func.date_trunc("month", ShiftAllowances.duration_month) == start_date)
  
     else:
         # No month filters
         # If employee or AM provided → RETURN ALL MONTHS
         if not emp_id and not account_manager:
             # No filters at all → return current month only
-            query = query.filter(func.date_trunc("month", ShiftAllowances.payroll_month) == current_month_start)
+            query = query.filter(func.date_trunc("month", ShiftAllowances.duration_month) == current_month_start)
  
     # Execute query
     rows = query.all()
