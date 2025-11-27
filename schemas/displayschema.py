@@ -8,11 +8,11 @@ class ShiftAllowancesResponse(BaseModel):
     emp_id: str
     emp_name: str
     department: str
-    month: date
+    payroll_month: str
     client: str
     project_code: Optional[str]
     account_manager: str
-    shift_category: List[str]
+    duration_month: str
  
     class Config:
         from_attributes = True
@@ -70,6 +70,7 @@ class EmployeeResponse(BaseModel):
 
 class PaginatedShiftResponse(BaseModel):
     total_records: int
+    selected_month: str
     data: List[ShiftAllowancesResponse]
 
     class Config:
