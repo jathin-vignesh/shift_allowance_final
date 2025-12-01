@@ -19,7 +19,6 @@ def export_filtered_excel(
     start_month: str | None = None,
     end_month: str | None = None
 ):
-
     # ===== VALIDATIONS =====
     if end_month and not start_month:
         raise HTTPException(status_code=400, detail="start_month is required when end_month is provided")
@@ -30,11 +29,13 @@ def export_filtered_excel(
                 datetime.strptime(m, "%Y-%m")
             except ValueError:
                 raise HTTPException(status_code=400, detail="Month format must be YYYY-MM")
+
     if start_month and end_month and start_month > end_month:
         raise HTTPException(
             status_code=400,
             detail="start_month must be less than or equal to end_month"
         )
+
     current_month = datetime.now().strftime("%Y-%m")
     if start_month and start_month > current_month:
         raise HTTPException(
@@ -47,6 +48,7 @@ def export_filtered_excel(
             status_code=400,
             detail=f"end_month '{end_month}' cannot be greater than current month {current_month}"
         )
+
     # base query
     query = (
         db.query(
@@ -81,7 +83,6 @@ def export_filtered_excel(
     if account_manager:
         query = query.filter(func.upper(ShiftAllowances.account_manager).like(f"%{account_manager.upper()}%"))
 
-
     rows = query.order_by(ShiftAllowances.duration_month, ShiftAllowances.emp_id).all()
 
     if not rows:
@@ -104,6 +105,9 @@ def export_filtered_excel(
                 label = SHIFT_LABELS.get(m.shift_type, m.shift_type)
                 shift_output[label] = float(m.days)
 
-        final_data.append({k: v for k, v in {**base, **shift_output}.items() if v is not None})
+        final_data.append({
+            **base,
+            "shift_details": shift_output      
+        })
 
     return jsonable_encoder(final_data)

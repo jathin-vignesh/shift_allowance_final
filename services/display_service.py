@@ -78,10 +78,9 @@ def fetch_shift_data(db: Session, start: int, limit: int):
 
         result.append({
             **row._asdict(),
-            **shift_output    # merge directly into main response
+            "shift_details": shift_output
         })
     return selected_month, total_records, result, message
-
 
 def parse_shift_value(value: str):
     """Convert input to float and validate shift value."""
