@@ -192,7 +192,7 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
             db.commit()
             raise HTTPException(
                 status_code=400,
-                detail={"message": "No valid rows found in file", "error_file": error_file}
+                detail={"message": "No valid rows found in file", "error_file": f"{fname}"}
             )
 
         # parse months to dates only for valid rows going into DB
@@ -246,7 +246,7 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
                     "message": "File processed with errors",
                     "records_inserted": inserted_count,
                     "skipped_records": len(error_df),
-                    "error_file": error_file,
+                    "error_file": f"{fname}",
                 },
             )
 
@@ -277,7 +277,7 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
                 status_code=400,
                 detail={
                     "message": "Duplicate data exists in DB",
-                    "error_file": f"{base_url}/upload/error-files/{fname}",
+                    "error_file": f"{fname}",
                 },
             )
 
