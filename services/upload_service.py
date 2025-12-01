@@ -240,6 +240,8 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
 
         # always return 400 if error file exists, even if some rows inserted
         if error_file:
+            uploaded_file.status = "partial"
+            db.commit()
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -257,7 +259,8 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
 
     except HTTPException as http_err:
         db.rollback()
-        uploaded_file.status = "failed"
+        if uploaded_file.status not in ["partial", "processed"]:
+            uploaded_file.status = "failed"
         db.commit()
         raise http_err
 
