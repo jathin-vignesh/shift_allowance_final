@@ -6,18 +6,14 @@ from utils.dependencies import get_current_user
 
 router = APIRouter(prefix="/employee-details", tags=["Search Details"])
 
-
 @router.get("/Search")
 def fetch_employee_details(
-    emp_id: str | None = Query(None, description="Search by Employee ID"),
-    account_manager: str | None = Query(None, description="Search by Account Manager"),
+    emp_id: str | None = Query(None),
+    account_manager: str | None = Query(None),
+    start_month: str | None = Query(None, description="YYYY-MM"),
+    end_month: str | None = Query(None, description="YYYY-MM"),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
-
-    data = get_employee_details(db, emp_id, account_manager)
-
-    return {
-        "total": len(data),
-        "data": data
-    }
+    data = get_employee_details(db, emp_id, account_manager, start_month, end_month)
+    return data

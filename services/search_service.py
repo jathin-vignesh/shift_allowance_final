@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,8 +12,31 @@ SHIFT_LABELS = {
     "PRIME": "PRIME(12AM to 9AM)"
 }
 
-def export_filtered_excel(db: Session, emp_id: str | None = None, account_manager: str | None = None):
+def export_filtered_excel(
+    db: Session,
+    emp_id: str | None = None,
+    account_manager: str | None = None,
+    start_month: str | None = None,
+    end_month: str | None = None
+):
 
+    # ===== VALIDATIONS =====
+    if end_month and not start_month:
+        raise HTTPException(status_code=400, detail="start_month is required when end_month is provided")
+
+    for m in [start_month, end_month]:
+        if m:
+            try:
+                datetime.strptime(m, "%Y-%m")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Month format must be YYYY-MM")
+    if start_month and end_month and start_month > end_month:
+        raise HTTPException(
+            status_code=400,
+            detail="start_month must be less than or equal to end_month"
+        )
+
+    # base query
     query = (
         db.query(
             ShiftAllowances.id,
@@ -28,26 +52,35 @@ def export_filtered_excel(db: Session, emp_id: str | None = None, account_manage
         )
     )
 
+    # month filters
+    if start_month and end_month:
+        query = query.filter(
+            func.to_char(ShiftAllowances.duration_month, "YYYY-MM") >= start_month,
+            func.to_char(ShiftAllowances.duration_month, "YYYY-MM") <= end_month
+        )
+    elif start_month:
+        query = query.filter(
+            func.to_char(ShiftAllowances.duration_month, "YYYY-MM") == start_month
+        )
+
+    # emp filters
     if emp_id:
-        query = query.filter(ShiftAllowances.emp_id.ilike(f"%{emp_id}%"))
+        query = query.filter(func.upper(ShiftAllowances.emp_id).like(f"%{emp_id.upper()}%"))
 
     if account_manager:
-        query = query.filter(ShiftAllowances.account_manager.ilike(f"%{account_manager}%"))
+        query = query.filter(func.upper(ShiftAllowances.account_manager).like(f"%{account_manager.upper()}%"))
 
-    rows = query.all()
+
+    rows = query.order_by(ShiftAllowances.duration_month, ShiftAllowances.emp_id).all()
 
     if not rows:
-        raise HTTPException(
-            status_code=404,
-            detail="No data found for the given emp_id or account_manager"
-        )
+        raise HTTPException(status_code=404, detail="No data found based on filters")
 
     final_data = []
     for row in rows:
         base = row._asdict()
-        shiftallowance_id = base.pop("id")  # remove internal id from output
+        shiftallowance_id = base.pop("id")
 
-        # fetch shift mapping
         mappings = (
             db.query(ShiftMapping.shift_type, ShiftMapping.days)
             .filter(ShiftMapping.shiftallowance_id == shiftallowance_id)
@@ -60,8 +93,6 @@ def export_filtered_excel(db: Session, emp_id: str | None = None, account_manage
                 label = SHIFT_LABELS.get(m.shift_type, m.shift_type)
                 shift_output[label] = float(m.days)
 
-        # merge base + shifts and remove None
-        record = {k: v for k, v in {**base, **shift_output}.items() if v is not None}
-        final_data.append(record)
+        final_data.append({k: v for k, v in {**base, **shift_output}.items() if v is not None})
 
     return jsonable_encoder(final_data)
