@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Query
 from sqlalchemy.orm import Session
 from schemas.dashboardschema import VerticalGraphResponse, PieChartClientShift
 from db import get_db
@@ -16,11 +16,13 @@ router = APIRouter(prefix="/dashboard")
 
 @router.get("/horizontal-bar")
 def horizontal_bar(
-    duration_month: str,
+    start_month: str = Query(...),
+    end_month: str | None = Query(None),
+    top: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return get_horizontal_bar_service(db, duration_month)
+    return get_horizontal_bar_service(db, start_month, end_month, top)
 
 
 @router.get("/graph")

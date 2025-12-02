@@ -7,24 +7,39 @@ from models.models import ShiftAllowances, ShiftsAmount
 from schemas.dashboardschema import VerticalGraphResponse
 
 
-def get_horizontal_bar_service(db: Session, duration_month: str):
-
-    if not duration_month:
-        raise HTTPException(status_code=400, detail="duration_month is required. Example: 2025-01")
-
+def validate_month_format(month: str):
     try:
-        month_date = datetime.strptime(duration_month + "-01", "%Y-%m-%d").date()
+        return datetime.strptime(month + "-01", "%Y-%m-%d").date()
     except:
-        raise HTTPException(status_code=400, detail="Invalid duration_month format. Expected YYYY-MM")
+        raise HTTPException(status_code=400, detail="Invalid month format. Expected YYYY-MM")
 
-    records = (
-        db.query(ShiftAllowances)
-        .filter(ShiftAllowances.duration_month == month_date)
-        .all()
-    )
+
+def get_horizontal_bar_service(db: Session, start_month: str, end_month: str | None, top: int | None):
+
+    # Validate start month
+    start_date = validate_month_format(start_month)
+
+    # Determine query range
+    if end_month:
+        end_date = validate_month_format(end_month)
+        if start_date > end_date:
+            raise HTTPException(status_code=400, detail="start_month must be <= end_month")
+        records = (
+            db.query(ShiftAllowances)
+            .filter(ShiftAllowances.duration_month >= start_date)
+            .filter(ShiftAllowances.duration_month <= end_date)
+            .all()
+        )
+    else:
+        # Only one month
+        records = (
+            db.query(ShiftAllowances)
+            .filter(ShiftAllowances.duration_month == start_date)
+            .all()
+        )
 
     if not records:
-        raise HTTPException(status_code=404, detail="No records found for this duration_month")
+        raise HTTPException(status_code=404, detail="No records found in the given month range")
 
     output = {}
 
@@ -46,12 +61,29 @@ def get_horizontal_bar_service(db: Session, duration_month: str):
             if stype in ("A", "B", "C", "PRIME"):
                 output[client][stype] += Decimal(mapping.days or 0)
 
+    # Convert sets to counts and decimals to floats
+    result = []
     for client, info in output.items():
-        info["total_unique_employees"] = len(info["total_unique_employees"])
-        for k in ("A", "B", "C", "PRIME"):
-            info[k] = float(info[k])
+        total = len(info["total_unique_employees"])
+        result.append({
+            "client": client,
+            "total_unique_employees": total,
+            "A": float(info["A"]),
+            "B": float(info["B"]),
+            "C": float(info["C"]),
+            "PRIME": float(info["PRIME"]),
+        })
 
-    return {"horizontal_bar": output}
+    # Sort by descending total employees
+    result.sort(key=lambda x: x["total_unique_employees"], reverse=True)
+
+    # Apply top filter if provided
+    if top is not None:
+        if top <= 0:
+            raise HTTPException(status_code=400, detail="top must be a positive integer")
+        result = result[:top]
+
+    return {"horizontal_bar": result}
 
 
 
