@@ -94,3 +94,23 @@ class ShiftUpdateResponse(BaseModel):
     total_days: float
     total_allowance: float
     shift_details: List[ShiftDetail]
+
+class ClientAllowance(BaseModel):
+    client: str
+    total_allowances: float
+ 
+    class Config:
+        from_attributes = True
+ 
+ 
+class ClientAllowanceList(BaseModel):
+    data: List[ClientAllowance]
+ 
+ 
+class ClientDeptResponse(BaseModel):
+    client: str
+    departments: List[str]
+ 
+    class Config:
+        from_attributes = True
+ 
