@@ -25,3 +25,7 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+/media/
+/tmp/
+/uploads/
+/error_excels/
