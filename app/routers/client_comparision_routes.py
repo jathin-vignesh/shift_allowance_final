@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query,HTTPException
 from sqlalchemy.orm import Session
 from db import get_db
 from services.client_comparision_service import (client_comparison_service,get_client_total_allowances,
@@ -22,10 +22,18 @@ def client_comparison(
         end_month=end_month
     )
 
+
+
 @router.get("/client-total-allowances")
-def client_total_allowances(top: str | None = None, db: Session = Depends(get_db),current_user=Depends(get_current_user)):
-   
-    return get_client_total_allowances(db, top)
+def client_total_allowances(
+    start_month: str | None = None,
+    end_month: str | None = None,
+    top: str | None = None,
+    db: Session = Depends(get_db)
+):
+    return get_client_total_allowances(db, start_month, end_month, top)
+
+
  
 @router.get("/client-departments", response_model=list[ClientDeptResponse] | ClientDeptResponse)
 def get_client_departments(client: str | None = None, db: Session = Depends(get_db),current_user=Depends(get_current_user)):

@@ -17,3 +17,4 @@ class VerticalGraphResponse(BaseModel):
     client_name: str
     total_days: float
     total_allowances: float
+
