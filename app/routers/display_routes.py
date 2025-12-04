@@ -5,7 +5,7 @@ from models.models import ShiftAllowances,ShiftMapping
 from utils.dependencies import get_current_user
 from schemas.displayschema import PaginatedShiftResponse,EmployeeResponse,ShiftUpdateRequest,ShiftUpdateResponse
 from services.display_service import update_shift_service,fetch_shift_record,generate_employee_shift_excel,fetch_shift_data
-from sqlalchemy import func
+from sqlalchemy import func,distinct
 import pandas as pd
 from io import BytesIO
 from fastapi.responses import StreamingResponse
@@ -69,3 +69,17 @@ def update_shift_detail(
         updates=updates,
         duration_month=duration_month
     )
+
+@router.get("/account-manager")
+def display_account_manger(
+    name: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    account_managers = (db.query(distinct(ShiftAllowances.account_manager))
+    .filter(ShiftAllowances.account_manager.isnot(None),
+        ShiftAllowances.account_manager.ilike(f'%{name}%'))
+    .order_by(ShiftAllowances.account_manager)
+    .all())
+    names = [name[0] for name in account_managers]
+    return {"account_managers":names}
