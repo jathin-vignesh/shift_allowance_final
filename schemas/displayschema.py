@@ -123,16 +123,14 @@ class CorrectedRow(BaseModel):
     project: Optional[str] = None
 
     duration_month: Optional[str] = Field(
-        None,
-        description="YYYY-MM (used as filter)"
-    )
+    None,
+    description="Format: Mon'YY (e.g. Jan'25)"
+)
 
-   
     payroll_month: Optional[str] = Field(
-        None,
-        description="YYYY-MM (used for update)"
-    )
-
+    None,
+    description="Format: Mon'YY (e.g. Jan'25)"
+)
     shift_a_days: Optional[Union[int, float]] = 0
     shift_b_days: Optional[Union[int, float]] = 0
     shift_c_days: Optional[Union[int, float]] = 0
