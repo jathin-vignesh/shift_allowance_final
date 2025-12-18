@@ -6,6 +6,7 @@ from sqlalchemy import func
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from utils.client_enums import Company
 
+
 def export_filtered_excel(
     db: Session,
     emp_id: str | None = None,
@@ -24,7 +25,33 @@ def export_filtered_excel(
         if r.shift_type:
             rates[r.shift_type.upper()] = float(r.amount or 0)
 
- 
+    if not start_month and not end_month:
+        found_month = None
+        today = datetime.now().replace(day=1)
+
+        for i in range(12):
+            year = today.year
+            month = today.month - i
+            if month <= 0:
+                month += 12
+                year -= 1
+
+            month_str = f"{year:04d}-{month:02d}"
+
+            exists = db.query(ShiftAllowances.id).filter(
+                func.to_char(ShiftAllowances.duration_month, "YYYY-MM") == month_str
+            ).first()
+
+            if exists:
+                found_month = month_str
+                break
+
+        if not found_month:
+            raise HTTPException(404, "No data found in last 12 months")
+
+        start_month = found_month
+
+
     if end_month and not start_month:
         raise HTTPException(400, "start_month is required when end_month is provided")
 
@@ -45,7 +72,7 @@ def export_filtered_excel(
     if end_month and end_month > current_month:
         raise HTTPException(400, "end_month cannot be in future")
 
-
+ 
     base = db.query(
         ShiftAllowances.id,
         ShiftAllowances.emp_id,
@@ -78,10 +105,8 @@ def export_filtered_excel(
     if client:
         base = base.filter(func.upper(ShiftAllowances.client).like(f"%{client.upper()}%"))
 
-   
     overall_records = base.count()
 
-   
     query = base.order_by(
         ShiftAllowances.duration_month.desc(),
         ShiftAllowances.emp_id.asc(),
@@ -95,6 +120,7 @@ def export_filtered_excel(
     if not rows:
         raise HTTPException(404, "No data found")
 
+  
     SHIFT_LABELS = {
         "A": "A(9PM to 6AM)",
         "B": "B(4PM to 1AM)",
@@ -112,7 +138,6 @@ def export_filtered_excel(
     overall_total_allowance = 0.0
     result = []
 
-   
     for row in rows:
         d = row._asdict()
         sid = d.pop("id")
@@ -143,7 +168,6 @@ def export_filtered_excel(
         d["shift_details"] = shift_details
         d["total_allowance"] = round(total_allowance, 2)
 
-        
         client_value = d.get("client")
         abbr = next((c.name for c in Company if c.value == client_value), None)
         if abbr:
@@ -151,7 +175,6 @@ def export_filtered_excel(
 
         result.append(d)
 
- 
     result.append({
         "shift_details": {
             k: int(v) if v.is_integer() else v
@@ -161,12 +184,8 @@ def export_filtered_excel(
         "total_allowance": round(overall_total_allowance, 2)
     })
 
-    if start is not None and limit is not None:
-        total_records = len(rows)       
-    else:
-        total_records = overall_records 
+    total_records = len(rows) if start is not None and limit is not None else overall_records
 
     return total_records, {
-    "employees": result
-}
-
+        "employees": result
+    }
