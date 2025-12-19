@@ -436,10 +436,10 @@ def get_client_departments_service(db: Session, client: str | None):
             )
  
         departments = sorted(list({r[0] for r in rows if r[0]}))
-        return {
+        return [{
             "client": client,
             "departments": departments
-        }
+        }]
  
     rows = db.query(
         ShiftAllowances.client,
