@@ -1,5 +1,5 @@
 from enum import Enum
-
+import hashlib
 class Company(Enum):
     ATD = "American Tire Distributors Inc"
     VERTISYSTEMS = "Vertisystem Inc"
@@ -26,7 +26,8 @@ class Company(Enum):
     HUMMING_BIRD = "Humming Bird Education Limited"
     CHEP = "CHEP USA Inc"
     LEASELOCK = "LeaseLock Inc"
-    MOURITECH = "MOURI Tech Limited / MOURI Tech LLC"
+    MOURITECH = "MOURI Tech Limited"
+    MOURITECH_LLC ="MOURI Tech LLC" 
     ILC_DOVER = "ILC Dover"
     NWN = "NWN Corporation"
     RITCHIE = "Ritchie Bros. Auctioneers Inc"
@@ -49,3 +50,18 @@ class Company(Enum):
     REGAL = "Regal Rexnord Corporation"
     UWF = "University of Wisconsin Foundation"
     DELEK = "Delek US Holdings Inc"
+
+def generate_unique_colors(enum_cls):
+    used = set()
+    color_map = {}
+
+    for company in enum_cls:
+        base = hashlib.sha256(company.name.encode()).hexdigest()
+        for i in range(0, len(base), 6):
+            color = f"#{base[i:i+6]}"
+            if color not in used:
+                used.add(color)
+                color_map[company] = color
+                break
+
+    return color_map
