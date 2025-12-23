@@ -1,5 +1,6 @@
 from enum import Enum
 import hashlib
+import colorsys
 class Company(Enum):
     ATD = "American Tire Distributors Inc"
     VERTISYSTEMS = "Vertisystem Inc"
@@ -51,17 +52,63 @@ class Company(Enum):
     UWF = "University of Wisconsin Foundation"
     DELEK = "Delek US Holdings Inc"
 
+
+PALETTE = [
+    "#9FB7E5",
+    "#8FC9C2",
+    "#E0AFC7",
+    "#E5B18A",
+    "#B8A9DE",
+    "#D6A3A3",
+    "#E0A07A",
+    "#C8D48A",
+    "#E2A18F",
+    "#8FAADC",
+    "#7F9CCB",
+    "#9FBF8F",
+    "#8FB8A1",
+    "#7FBDB8",
+    "#8CBFCF",
+    "#A79BCF",
+    "#9B8EC2",
+    "#C2A27F",
+    "#B89B7A",
+    "#B0B0B0",
+    "#9E9E9E",
+    "#C97A7A",
+    "#D9A36A",
+    "#E0B07A",
+    "#7FAF8F",
+    "#7A95C7",
+    "#6F8FBE",
+    "#9A8BC7",
+    "#8F82BE",
+    "#CFAF6E",
+    "#B7A86A",
+    "#AFC38A",
+    "#8FB28F",
+    "#C38FA3",
+    "#B58FAF",
+    "#AFA38F",
+    "#C1B39A",
+    "#9CA7B8",
+    "#C6A38F",
+    "#BFA08C",
+    "#A8B88F",
+    "#9FB29F",
+    "#C28F7A",
+    "#B98C78",
+]
+
 def generate_unique_colors(enum_cls):
-    used = set()
     color_map = {}
 
     for company in enum_cls:
-        base = hashlib.sha256(company.name.encode()).hexdigest()
-        for i in range(0, len(base), 6):
-            color = f"#{base[i:i+6]}"
-            if color not in used:
-                used.add(color)
-                color_map[company] = color
-                break
+        digest = int(
+            hashlib.sha256(company.name.encode()).hexdigest(),
+            16,
+        )
+        color = PALETTE[digest % len(PALETTE)]
+        color_map[company] = color
 
     return color_map
