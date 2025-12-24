@@ -1,3 +1,5 @@
+"""Client summary service for month, quarter, and range based analytics."""
+
 from datetime import date, datetime
 from typing import List, Dict
 from fastapi import HTTPException
@@ -9,6 +11,7 @@ from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 # ---------------- HELPERS ----------------
 
 def validate_year(year: int):
+    """Validate that year is positive and not in the future."""
     current_year = date.today().year
     if year <= 0:
         raise HTTPException(400, "selected_year must be greater than 0")
@@ -17,6 +20,7 @@ def validate_year(year: int):
 
 
 def parse_yyyy_mm(value: str) -> date:
+    """Parse YYYY-MM string into a date object."""
     try:
         return datetime.strptime(value, "%Y-%m").date().replace(day=1)
     except Exception:
@@ -24,6 +28,7 @@ def parse_yyyy_mm(value: str) -> date:
 
 
 def quarter_to_months(q: str) -> List[int]:
+    """Convert quarter label to list of months."""
     mapping = {
         "Q1": [1, 2, 3],
         "Q2": [4, 5, 6],
@@ -37,6 +42,7 @@ def quarter_to_months(q: str) -> List[int]:
 
 
 def month_range(start: date, end: date) -> List[date]:
+    """Generate a list of month-start dates between two dates."""
     if start > end:
         raise HTTPException(400, "start_month cannot be after end_month")
 
@@ -51,12 +57,14 @@ def month_range(start: date, end: date) -> List[date]:
 
 
 def empty_shift_totals():
+    """Return an empty shift totals dictionary."""
     return {"A": 0, "B": 0, "C": 0, "PRIME": 0}
 
 
 # ---------------- MAIN SERVICE ----------------
 
 def client_summary_service(db: Session, payload: dict):
+    """Build client summary grouped by month or quarter."""
 
     payload = payload or {}
 
@@ -127,7 +135,7 @@ def client_summary_service(db: Session, payload: dict):
             "selected_year is mandatory when using selected_months or selected_quarters"
         )
 
-    quarter_map: Dict[str, List[date]] = {}   
+    quarter_map: Dict[str, List[date]] = {}
 
     # ---- Month range ----
     if start_month and end_month:
@@ -281,7 +289,7 @@ def client_summary_service(db: Session, payload: dict):
         client_block["client_total"] += total
         month_block["month_total"][stype] += total
         month_block["month_total"]["total_allowance"] += total
-    
+
     if isinstance(clients_payload, dict):
         for period_key, period_block in response.items():
             if "clients" not in period_block:
@@ -303,6 +311,6 @@ def client_summary_service(db: Session, payload: dict):
                             "employees": [],
                             "dept_head_count": 0,
                             "error": f"No data available for {client_name} - {dept} in {period_key}",
-                        } 
+                        }
 
     return response
