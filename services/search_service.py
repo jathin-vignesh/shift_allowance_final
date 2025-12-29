@@ -1,15 +1,37 @@
+"""
+Filtered shift export service.
+
+This module provides functionality to fetch and aggregate employee shift
+allowance data across configurable month ranges. It supports advanced
+filtering by employee, account manager, department, and client, while
+enforcing strict month validation rules.
+
+The service computes both paginated employee-level results and overall
+summary statistics, including headcount, shift-wise totals, and total
+allowances. It is designed for reporting, dashboards, and export workflows.
+"""
+
+import re
 from datetime import datetime, date
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-import re
-
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from utils.client_enums import Company
 
 
 def validate_not_future_month(month_str: str, field_name: str):
-    
+    """
+    Validate that a month string is in YYYY-MM format and not in the future.
+
+    Args:
+        month_str (str): Month value in YYYY-MM format.
+        field_name (str): Field name used in error messages.
+
+    Raises:
+        HTTPException: If the format is invalid or the month is in the future.
+    """
+
 
     if not re.fullmatch(r"\d{4}-\d{2}", month_str):
         raise HTTPException(
@@ -17,7 +39,7 @@ def validate_not_future_month(month_str: str, field_name: str):
             detail=f"{field_name} must be in YYYY-MM format"
         )
 
-   
+
     try:
         month_date = datetime.strptime(month_str, "%Y-%m").date().replace(day=1)
     except ValueError:
@@ -26,7 +48,7 @@ def validate_not_future_month(month_str: str, field_name: str):
             detail=f"Invalid {field_name} value"
         )
 
-   
+
     today = date.today().replace(day=1)
     if month_date > today:
         raise HTTPException(
@@ -45,15 +67,46 @@ def export_filtered_excel(
     start: int = 0,
     limit: int = 10,
 ):
+    """
+    Fetch paginated employee shift data with aggregated allowance summaries.
 
-   
+    This service retrieves shift allowance records filtered by optional
+    employee, account manager, department, client, and month range criteria.
+    It automatically falls back to the most recent available month when no
+    date filters are provided.
+
+    The response includes:
+    - Total record count
+    - Overall shift-wise totals
+    - Overall headcount and allowance totals
+    - Paginated employee-level breakdowns
+
+    Args:
+        db (Session): Active SQLAlchemy database session.
+        emp_id (str | None): Employee ID filter (partial match).
+        account_manager (str | None): Account manager filter.
+        department (str | None): Department filter.
+        client (str | None): Client filter.
+        start_month (str | None): Start month in YYYY-MM format.
+        end_month (str | None): End month in YYYY-MM format.
+        start (int): Pagination offset.
+        limit (int): Pagination limit.
+
+    Returns:
+        dict: Aggregated summary and paginated employee shift data.
+
+    Raises:
+        HTTPException: If validation fails or no data is found.
+    """
+
+
     rates = {
         r.shift_type.upper(): float(r.amount or 0)
         for r in db.query(ShiftsAmount).all()
         if r.shift_type
     }
 
-   
+
     if not start_month and not end_month:
         today = datetime.now().replace(day=1)
 
@@ -88,7 +141,7 @@ def export_filtered_excel(
     if start_month and end_month and start_month > end_month:
         raise HTTPException(400, "start_month cannot be greater than end_month")
 
-  
+
     base = db.query(
         ShiftAllowances.id,
         ShiftAllowances.emp_id,
@@ -116,7 +169,8 @@ def export_filtered_excel(
     if emp_id:
         base = base.filter(func.upper(ShiftAllowances.emp_id).like(f"%{emp_id.upper()}%"))
     if account_manager:
-        base = base.filter(func.upper(ShiftAllowances.account_manager).like(f"%{account_manager.upper()}%"))
+        base = base.filter(
+            func.upper(ShiftAllowances.account_manager).like(f"%{account_manager.upper()}%"))
     if department:
         base = base.filter(func.upper(ShiftAllowances.department).like(f"%{department.upper()}%"))
     if client:
@@ -152,7 +206,7 @@ def export_filtered_excel(
         "PRIME": "PRIME(12AM to 9AM)",
     }
 
-    
+
     overall_shift_details = {v: 0.0 for v in SHIFT_LABELS.values()}
     overall_total_allowance = 0.0
 
@@ -172,7 +226,7 @@ def export_filtered_excel(
             label = SHIFT_LABELS.get(m.shift_type.upper(), m.shift_type)
             overall_shift_details[label] += days
 
- 
+
     employees = []
 
     for row in paginated_rows:
