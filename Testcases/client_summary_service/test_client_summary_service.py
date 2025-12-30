@@ -1,5 +1,12 @@
+"""
+Client summary API test cases.
+
+This module contains integration tests for the `/client-summary`
+endpoint, validating successful responses for all clients and
+specific clients, as well as error handling for invalid inputs.
+"""
+
 from datetime import date
-from fastapi.testclient import TestClient
 from models.models import ShiftAllowances
 
 # API ROUTES
@@ -7,6 +14,13 @@ CLIENT_SUMMARY_URL = "/client-summary"
 
 # HELPER FUNCTION
 def seed_client_summary_data(db):
+    """
+    Seed database with minimal shift allowance data
+    required for client summary tests.
+
+    Args:
+        db: Database session fixture.
+    """
     db.query(ShiftAllowances).delete()
     db.add(
         ShiftAllowances(
@@ -19,9 +33,13 @@ def seed_client_summary_data(db):
         )
     )
     db.commit()
-    
+
 # /client-summary API TESTCASES
 def test_client_summary_all_clients_success(client, db_session):
+    """
+    Verify client summary returns successfully when
+    requesting data for all clients.
+    """
     seed_client_summary_data(db_session)
 
     resp = client.post(CLIENT_SUMMARY_URL, json={"clients": "ALL"})
@@ -31,6 +49,10 @@ def test_client_summary_all_clients_success(client, db_session):
 
 
 def test_client_summary_specific_client_success(client, db_session):
+    """
+    Verify client summary returns data for a specific client
+    with valid year and month filters.
+    """
     seed_client_summary_data(db_session)
 
     payload = {
@@ -52,6 +74,10 @@ def test_client_summary_specific_client_success(client, db_session):
 
 
 def test_client_summary_months_without_year_fails(client):
+    """
+    Verify request fails when months are provided
+    without specifying a year.
+    """
     payload = {
         "clients": "ALL",
         "selected_months": ["01"],
@@ -64,6 +90,9 @@ def test_client_summary_months_without_year_fails(client):
 
 
 def test_client_summary_invalid_quarter(client):
+    """
+    Verify request fails when an invalid quarter value is provided.
+    """
     payload = {
         "clients": "ALL",
         "selected_year": "2024",
