@@ -1,10 +1,17 @@
+"""
+Employee details search API test cases.
+
+This module contains integration tests for the
+`/employee-details/search` endpoint, validating successful
+search results and various input validation scenarios.
+"""
+
 from datetime import date
+from sqlalchemy.sql import func
 from fastapi.testclient import TestClient
 from models.models import ShiftAllowances, ShiftMapping, ShiftsAmount
 from utils.client_enums import Company
-
-from sqlalchemy.sql import func
-func.to_char = lambda col, fmt: col  
+func.to_char = lambda col, fmt: col
 
 # API ROUTES
 SEARCH_EMPLOYEE_URL = "/employee-details/search"
@@ -12,19 +19,25 @@ SEARCH_EMPLOYEE_URL = "/employee-details/search"
 # /employee-details/search API TESTCASES
 
 def test_search_employee_success(client: TestClient, db_session):
+    """
+    Verify employee search returns correct data and
+    calculated shift allowance for a valid date range.
+    """
     db_session.query(ShiftMapping).delete()
     db_session.query(ShiftAllowances).delete()
     db_session.query(ShiftsAmount).delete()
     db_session.commit()
-    allowance = ShiftAllowances(emp_id="IN01804396", emp_name="Test User", grade="L1", department="IT",
+    allowance = ShiftAllowances(emp_id="IN01804396", emp_name="Test User", grade="L1",
+                                department="IT",
                                 client=Company.ATD.value, project="P", account_manager="M",
                                 duration_month=date(2024,1,1), payroll_month=date(2024,2,1))
     db_session.add_all([allowance, ShiftsAmount(shift_type="A", amount=500, payroll_year=2024)])
     db_session.commit()
     db_session.add(ShiftMapping(shiftallowance_id=allowance.id, shift_type="A", days=2))
     db_session.commit()
-    
-    res = client.get(SEARCH_EMPLOYEE_URL, params={"start_month":"2024-01","end_month":"2024-02"}).json()
+
+    res = client.get(SEARCH_EMPLOYEE_URL,
+                     params={"start_month":"2024-01","end_month":"2024-02"}).json()
     emp = res["data"]["employees"][0]
     assert res["total_records"] == 1
     assert emp["emp_id"] == "IN01804396"
@@ -33,12 +46,17 @@ def test_search_employee_success(client: TestClient, db_session):
 
 
 def test_search_employee_no_data(client: TestClient, db_session):
+    """
+    Verify API returns 404 when no employee data exists
+    for the given search criteria.
+    """
     db_session.query(ShiftMapping).delete()
     db_session.query(ShiftAllowances).delete()
     db_session.query(ShiftsAmount).delete()
     db_session.commit()
 
-    response = client.get(SEARCH_EMPLOYEE_URL, params={"start_month": "2024-01", "end_month": "2024-02"})
+    response = client.get(SEARCH_EMPLOYEE_URL, params={"start_month": "2024-01",
+                                                       "end_month": "2024-02"})
     data = response.json()
 
     assert response.status_code == 404
@@ -47,18 +65,27 @@ def test_search_employee_no_data(client: TestClient, db_session):
 
 
 def test_search_employee_invalid_month_format(client: TestClient):
+    """
+    Verify API returns 400 for invalid month format.
+    """
     response = client.get(SEARCH_EMPLOYEE_URL, params={"start_month": "Jan-2024"})
     assert response.status_code == 400
     assert "YYYY-MM" in response.json()["detail"]
 
 
 def test_search_employee_future_month(client: TestClient):
+    """
+    Verify API rejects future month values.
+    """
     response = client.get(SEARCH_EMPLOYEE_URL, params={"start_month": "2099-01"})
     assert response.status_code == 400
     assert "future month" in response.json()["detail"].lower()
 
 
 def test_search_employee_start_month_greater_than_end_month(client: TestClient):
+    """
+    Verify API returns 400 when start_month is greater than end_month.
+    """
     response = client.get(
         SEARCH_EMPLOYEE_URL,
         params={"start_month": "2024-05", "end_month": "2024-01"}
@@ -68,6 +95,10 @@ def test_search_employee_start_month_greater_than_end_month(client: TestClient):
 
 
 def test_search_employee_end_month_without_start(client: TestClient):
+    """
+    Verify API returns 400 when end_month is provided
+    without start_month.
+    """
     response = client.get(SEARCH_EMPLOYEE_URL, params={"end_month": "2024-02"})
     data = response.json()
 
