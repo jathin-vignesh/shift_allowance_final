@@ -54,9 +54,9 @@ def normalize_company_filter(client: str | None) -> str | None:
 
     for company in Company:
         if company.name == client_upper:
-            return company.value  
+            return company.value
 
-    return client  
+    return client
 
 def export_filtered_excel(
     db: Session,
@@ -73,7 +73,7 @@ def export_filtered_excel(
     Fetch paginated employee shift data with aggregated allowance summaries.
     """
 
-    
+
     rates = {
         r.shift_type.upper(): float(r.amount or 0)
         for r in db.query(ShiftsAmount).all()
@@ -114,7 +114,7 @@ def export_filtered_excel(
     if start_month and end_month and start_month > end_month:
         raise HTTPException(400, "start_month cannot be greater than end_month")
 
-   
+
     base = db.query(
         ShiftAllowances.id,
         ShiftAllowances.emp_id,
@@ -140,7 +140,7 @@ def export_filtered_excel(
 
     client = normalize_company_filter(client)
 
- 
+
     if emp_id:
         base = base.filter(
             func.upper(ShiftAllowances.emp_id).like(f"%{emp_id.upper()}%")
@@ -164,7 +164,7 @@ def export_filtered_excel(
             .like(f"%{client.upper()}%")
         )
 
-   
+
     total_records = base.count()
     if total_records == 0:
         raise HTTPException(404, "No data found")
@@ -178,7 +178,7 @@ def export_filtered_excel(
 
     all_rows = base.all()
 
-   
+
     paginated_rows = (
         base.order_by(
             ShiftAllowances.duration_month.desc(),
@@ -189,7 +189,7 @@ def export_filtered_excel(
         .all()
     )
 
-  
+
     SHIFT_LABELS = {
         "A": "A(9PM to 6AM)",
         "B": "B(4PM to 1AM)",
@@ -197,7 +197,7 @@ def export_filtered_excel(
         "PRIME": "PRIME(12AM to 9AM)",
     }
 
-  
+
     overall_shift_details = {v: 0.0 for v in SHIFT_LABELS.values()}
     overall_total_allowance = 0.0
 
@@ -217,7 +217,7 @@ def export_filtered_excel(
             label = SHIFT_LABELS.get(m.shift_type.upper(), m.shift_type)
             overall_shift_details[label] += days
 
-    
+
     employees = []
 
     for row in paginated_rows:
