@@ -64,11 +64,12 @@ def month_range(start: str, end: str) -> Dict[int, List[int]]:
 
 def client_summary_download_service(db: Session, payload: dict) -> str:
     """
-    Generate and export client summary Excel
-    using client_summary_service output.
+    Generate and export client summary Excel.
+    Export is DEPARTMENT-level (not employee-level)
+    so zero departments are preserved.
     """
 
-    # ✅ Reuse existing logic (cache included)
+    # ✅ Use existing summary logic (includes zero-prefill)
     summary_data = client_summary_service(db, payload)
 
     if not summary_data:
@@ -82,20 +83,18 @@ def client_summary_download_service(db: Session, payload: dict) -> str:
 
         for client_name, client_block in period_data["clients"].items():
             for dept_name, dept_block in client_block["departments"].items():
-                for emp in dept_block.get("employees", []):
-                    rows.append({
-                        "Period": period_key,
-                        "Client": client_name,
-                        "Department": dept_name,
-                        "Employee ID": emp.get("emp_id"),
-                        "Employee Name": emp.get("emp_name"),
-                        "Account Manager": emp.get("account_manager"),
-                        "Shift A": emp.get("A", 0),
-                        "Shift B": emp.get("B", 0),
-                        "Shift C": emp.get("C", 0),
-                        "Prime": emp.get("PRIME", 0),
-                        "Total Allowance": emp.get("total", 0),
-                    })
+
+                rows.append({
+                    "Period": period_key,
+                    "Client": client_name,
+                    "Department": dept_name,
+                    "Head Count": dept_block.get("dept_head_count", 0),
+                    "Shift A": dept_block.get("dept_A", 0),
+                    "Shift B": dept_block.get("dept_B", 0),
+                    "Shift C": dept_block.get("dept_C", 0),
+                    "Shift PRIME": dept_block.get("dept_PRIME", 0),
+                    "Total Allowance": dept_block.get("dept_total", 0),
+                })
 
     if not rows:
         raise HTTPException(404, "No data available for export")
