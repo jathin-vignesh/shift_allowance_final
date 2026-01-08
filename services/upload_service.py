@@ -417,26 +417,32 @@ def load_shift_rates(db: Session) -> dict:
             rates[r.shift_type.upper()] = float(r.amount or 0)
     return rates
 
-def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
+def update_corrected_rows(db: Session, corrected_rows: List[CorrectedRow]):
     if not corrected_rows:
         raise HTTPException(400, "No corrected rows provided")
- 
+
     shift_rates = load_shift_rates(db)
     failed_rows = []
- 
+    corrected_months: Set[date] = set()
+
     for row in corrected_rows:
         try:
             duration_month = parse_yyyy_mm(row.duration_month)
             payroll_month = parse_yyyy_mm(row.payroll_month)
- 
+
+            duration_month = duration_month.replace(day=1)
+            payroll_month = payroll_month.replace(day=1)
+
+            # Track months for cache invalidation
+            corrected_months.add(duration_month)
+
             total_shift_days = validate_shift_days(row)
             if total_shift_days > days_in_month(duration_month):
                 raise HTTPException(
                     400,
                     "Total shift days exceed number of days in duration month"
                 )
- 
-         
+
             sa = (
                 db.query(ShiftAllowances)
                 .filter(
@@ -447,7 +453,7 @@ def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
                 )
                 .first()
             )
- 
+
             if not sa:
                 sa = ShiftAllowances(
                     emp_id=row.emp_id,
@@ -457,7 +463,8 @@ def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
                 )
                 db.add(sa)
                 db.flush()
- 
+
+            # Update fields
             sa.emp_name = row.emp_name
             sa.grade = row.grade
             sa.current_status = row.current_status
@@ -484,11 +491,13 @@ def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
             sa.total_days_allowances = row.total_days_allowances
             sa.am_email_attempt = row.am_email_attempt
             sa.am_approval_status = row.am_approval_status
- 
+
+            # Remove old shift mappings
             db.query(ShiftMapping).filter(
                 ShiftMapping.shiftallowance_id == sa.id
             ).delete()
- 
+
+            # Insert updated mappings
             for shift, days in {
                 "A": row.shift_a_days,
                 "B": row.shift_b_days,
@@ -505,9 +514,7 @@ def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
                             total_allowance=float(days) * rate,
                         )
                     )
- 
-            db.commit()
- 
+
         except Exception as e:
             db.rollback()
             reason = e.detail if isinstance(e, HTTPException) else str(e)
@@ -518,18 +525,23 @@ def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
                 "payroll_month": row.payroll_month,
                 "reason": reason,
             })
- 
+
     if failed_rows:
         raise HTTPException(
             400,
-            json.dumps({
+            {
                 "message": "Validation failed",
-                "failed_rows": failed_rows
-            }, default=str)
+                "failed_rows": failed_rows,
+            }
         )
- 
+
+    db.commit()
+
+    if should_invalidate_latest_month_cache(corrected_months):
+        cache.pop(LATEST_MONTH_KEY, None)
+
     return {
         "message": "Rows inserted/updated successfully",
-        "records_processed": len(corrected_rows)
+        "records_processed": len(corrected_rows),
     }
  
