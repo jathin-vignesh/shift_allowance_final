@@ -7,11 +7,13 @@ import re
 import calendar
 from datetime import datetime, date
 from typing import List
-
+from diskcache import Cache
+from datetime import datetime, date
+from typing import Set
 import pandas as pd
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-
+import json
 from models.models import UploadedFiles, ShiftAllowances, ShiftMapping, ShiftsAmount
 from schemas.displayschema import CorrectedRow
 from utils.enums import ExcelColumnMap
@@ -25,6 +27,33 @@ MONTH_MAP = {
     "May": 5, "Jun": 6, "Jul": 7, "Aug": 8,
     "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12
 }
+
+cache = Cache("./diskcache/latest_month")
+LATEST_MONTH_KEY = "client_summary:latest_month"
+
+
+def should_invalidate_latest_month_cache(
+    excel_duration_months: Set[date],
+) -> bool:
+    """
+    Invalidate cache if uploaded Excel contains
+    duration_month >= cached latest month.
+    """
+
+    cached = cache.get(LATEST_MONTH_KEY)
+    if not cached:
+        return False  # nothing cached → nothing to invalidate
+
+    cached_month_str = cached.get("_cached_month")
+    if not cached_month_str:
+        return True  # defensive: bad cache state
+
+    cached_month = datetime.strptime(cached_month_str, "%Y-%m").date()
+
+    # normalize Excel months
+    excel_months = {m.replace(day=1) for m in excel_duration_months}
+
+    return any(m >= cached_month for m in excel_months)
 
 def make_json_safe(obj):
     """Convert dates and nested objects into JSON-safe values."""
@@ -217,6 +246,10 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
 
         clean_df["duration_month"] = clean_df["duration_month"].apply(parse_month_format)
         clean_df["payroll_month"] = clean_df["payroll_month"].apply(parse_month_format)
+        excel_duration_months: Set[date] = {
+            d.replace(day=1)
+            for d in clean_df["duration_month"]
+            if d is not None}
 
         shift_rates = load_shift_rates(db)
         inserted = 0
@@ -264,6 +297,8 @@ async def process_excel_upload(file, db: Session, user, base_url: str):
             inserted += 1
 
         db.commit()
+        if should_invalidate_latest_month_cache(excel_duration_months):
+            cache.pop(LATEST_MONTH_KEY, None)
 
         if error_rows:
             raise HTTPException(
@@ -382,7 +417,7 @@ def load_shift_rates(db: Session) -> dict:
             rates[r.shift_type.upper()] = float(r.amount or 0)
     return rates
 
-def update_corrected_rows(db: Session, corrected_rows: List[CorrectedRow]):
+def update_corrected_rows(db: Session, corrected_rows: List["CorrectedRow"]):
     if not corrected_rows:
         raise HTTPException(400, "No corrected rows provided")
  
@@ -394,10 +429,19 @@ def update_corrected_rows(db: Session, corrected_rows: List[CorrectedRow]):
             duration_month = parse_yyyy_mm(row.duration_month)
             payroll_month = parse_yyyy_mm(row.payroll_month)
  
+            total_shift_days = validate_shift_days(row)
+            if total_shift_days > days_in_month(duration_month):
+                raise HTTPException(
+                    400,
+                    "Total shift days exceed number of days in duration month"
+                )
+ 
+         
             sa = (
                 db.query(ShiftAllowances)
                 .filter(
                     ShiftAllowances.emp_id == row.emp_id,
+                    ShiftAllowances.client == row.client,
                     ShiftAllowances.duration_month == duration_month,
                     ShiftAllowances.payroll_month == payroll_month,
                 )
@@ -407,72 +451,43 @@ def update_corrected_rows(db: Session, corrected_rows: List[CorrectedRow]):
             if not sa:
                 sa = ShiftAllowances(
                     emp_id=row.emp_id,
-                    emp_name=row.emp_name,
-                    grade=row.grade,
-                    current_status=row.current_status,
-                    department=row.department,
                     client=row.client,
-                    project=row.project,
-                    project_code=row.project_code,
-                    account_manager=row.account_manager,
-                    practice_lead=row.practice_lead,
-                    delivery_manager=row.delivery_manager,
                     duration_month=duration_month,
                     payroll_month=payroll_month,
-                    shift_types=row.shift_types,
-                    total_days=row.total_days,
-                    timesheet_billable_days=row.timesheet_billable_days,
-                    timesheet_non_billable_days=row.timesheet_non_billable_days,
-                    diff=row.diff,
-                    final_total_days=row.final_total_days,
-                    billability_status=row.billability_status,
-                    practice_remarks=row.practice_remarks,
-                    rmg_comments=row.rmg_comments,
-                    amar_approval=row.amar_approval,
-                    shift_a_allowances=row.shift_a_allowances,
-                    shift_b_allowances=row.shift_b_allowances,
-                    shift_c_allowances=row.shift_c_allowances,
-                    prime_allowances=row.prime_allowances,
-                    total_days_allowances=row.total_days_allowances,
-                    am_email_attempt=row.am_email_attempt,
-                    am_approval_status=row.am_approval_status,
                 )
                 db.add(sa)
                 db.flush()
-            else:
-                # Update all fields
-                sa.emp_name = row.emp_name
-                sa.grade = row.grade
-                sa.current_status = row.current_status
-                sa.department = row.department
-                sa.client = row.client
-                sa.project = row.project
-                sa.project_code = row.project_code
-                sa.account_manager = row.account_manager
-                sa.practice_lead = row.practice_lead
-                sa.delivery_manager = row.delivery_manager
-                sa.shift_types = row.shift_types
-                sa.total_days = row.total_days
-                sa.timesheet_billable_days = row.timesheet_billable_days
-                sa.timesheet_non_billable_days = row.timesheet_non_billable_days
-                sa.diff = row.diff
-                sa.final_total_days = row.final_total_days
-                sa.billability_status = row.billability_status
-                sa.practice_remarks = row.practice_remarks
-                sa.rmg_comments = row.rmg_comments
-                sa.amar_approval = row.amar_approval
-                sa.shift_a_allowances = row.shift_a_allowances
-                sa.shift_b_allowances = row.shift_b_allowances
-                sa.shift_c_allowances = row.shift_c_allowances
-                sa.prime_allowances = row.prime_allowances
-                sa.total_days_allowances = row.total_days_allowances
-                sa.am_email_attempt = row.am_email_attempt
-                sa.am_approval_status = row.am_approval_status
-               
-                # Delete existing shift mappings for update
-                db.query(ShiftMapping).filter(
-                    ShiftMapping.shiftallowance_id == sa.id
-                ).delete()
+ 
+            sa.emp_name = row.emp_name
+            sa.grade = row.grade
+            sa.current_status = row.current_status
+            sa.department = row.department
+            sa.project = row.project
+            sa.project_code = row.project_code
+            sa.account_manager = row.account_manager
+            sa.practice_lead = row.practice_lead
+            sa.delivery_manager = row.delivery_manager
+            sa.shift_types = row.shift_types
+            sa.total_days = row.total_days
+            sa.timesheet_billable_days = row.timesheet_billable_days
+            sa.timesheet_non_billable_days = row.timesheet_non_billable_days
+            sa.diff = row.diff
+            sa.final_total_days = row.final_total_days
+            sa.billability_status = row.billability_status
+            sa.practice_remarks = row.practice_remarks
+            sa.rmg_comments = row.rmg_comments
+            sa.amar_approval = row.amar_approval
+            sa.shift_a_allowances = row.shift_a_allowances
+            sa.shift_b_allowances = row.shift_b_allowances
+            sa.shift_c_allowances = row.shift_c_allowances
+            sa.prime_allowances = row.prime_allowances
+            sa.total_days_allowances = row.total_days_allowances
+            sa.am_email_attempt = row.am_email_attempt
+            sa.am_approval_status = row.am_approval_status
+ 
+            db.query(ShiftMapping).filter(
+                ShiftMapping.shiftallowance_id == sa.id
+            ).delete()
  
             for shift, days in {
                 "A": row.shift_a_days,
@@ -491,22 +506,27 @@ def update_corrected_rows(db: Session, corrected_rows: List[CorrectedRow]):
                         )
                     )
  
+            db.commit()
+ 
         except Exception as e:
             db.rollback()
+            reason = e.detail if isinstance(e, HTTPException) else str(e)
             failed_rows.append({
                 "emp_id": row.emp_id,
+                "client": row.client,
                 "duration_month": row.duration_month,
-                "project": row.project,
-                "reason": str(e),
+                "payroll_month": row.payroll_month,
+                "reason": reason,
             })
  
     if failed_rows:
-        raise HTTPException(400, {
-            "message": "Validation failed",
-            "failed_rows": failed_rows
-        })
- 
-    db.commit()
+        raise HTTPException(
+            400,
+            json.dumps({
+                "message": "Validation failed",
+                "failed_rows": failed_rows
+            }, default=str)
+        )
  
     return {
         "message": "Rows inserted/updated successfully",
